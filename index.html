@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Gate Check-In</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{ --bg:#0f172a; --card:#ffffff; --green:#15803d; --green2:#16a34a; --red:#b91c1c; --amber:#b45309; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{ font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:#fff;
+        display:flex; flex-direction:column; min-height:100dvh; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  header{ padding:16px 18px; display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; }
+  header .dot{ width:10px; height:10px; border-radius:50%; background:var(--green2); box-shadow:0 0 0 4px rgba(22,163,74,.25); }
+  main{ flex:1; display:flex; flex-direction:column; padding:0 16px 20px; }
+  .scanwrap{ flex:1; display:flex; flex-direction:column; }
+  #reader{ width:100%; border-radius:18px; overflow:hidden; background:#000; }
+  #reader video{ border-radius:18px; }
+  .hint{ text-align:center; color:#cbd5e1; font-size:15px; margin:14px 6px 0; }
+  .card{ background:var(--card); color:var(--ink); border-radius:20px; padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.3); }
+  .pill{ display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+         padding:5px 11px; border-radius:999px; }
+  .name{ font-size:24px; font-weight:800; margin:14px 0 2px; }
+  .sub{ color:var(--muted); font-size:15px; }
+  .tally{ display:flex; gap:8px; margin:18px 0 4px; }
+  .tile{ flex:1; background:#f1f5f9; border-radius:14px; padding:12px 6px; text-align:center; }
+  .tile b{ display:block; font-size:26px; line-height:1; margin-bottom:4px; }
+  .tile span{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .tile.left b{ color:var(--green); }
+  button{ font-family:inherit; cursor:pointer; border:0; border-radius:14px; font-weight:700; }
+  .btn-primary{ width:100%; background:var(--green); color:#fff; font-size:19px; padding:17px; margin-top:18px; }
+  .btn-primary:active{ background:#136a33; }
+  .btn-ghost{ width:100%; background:#fff; color:var(--green); border:2px solid var(--green); font-size:16px; padding:13px; margin-top:10px; }
+  .btn-dark{ width:100%; background:var(--bg); color:#fff; font-size:16px; padding:15px; margin-top:14px; }
+  .stepper{ display:flex; align-items:center; justify-content:center; gap:14px; margin-top:16px; }
+  .stepper button{ width:54px; height:54px; font-size:28px; background:#f1f5f9; color:var(--ink); }
+  .stepper .num{ font-size:38px; font-weight:800; min-width:64px; text-align:center; }
+  .center{ text-align:center; }
+  .big-emoji{ font-size:64px; line-height:1.1; }
+  .msg-title{ font-size:23px; font-weight:800; margin:6px 0 4px; }
+  .spin{ width:40px; height:40px; border:4px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%;
+         animation:r 1s linear infinite; margin:40px auto; }
+  @keyframes r{ to{ transform:rotate(360deg); } }
+  .err{ color:#fecaca; text-align:center; font-size:14px; margin-top:10px; }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<header><span class="dot"></span> Gate Check-In</header>
+<main>
+  <!-- SCANNER -->
+  <section id="scanView" class="scanwrap">
+    <div id="reader"></div>
+    <p class="hint">Point the camera at the guest's QR code.</p>
+    <p id="scanErr" class="err"></p>
+  </section>
+
+  <!-- LOADING -->
+  <section id="loadView" class="hidden"><div class="spin"></div></section>
+
+  <!-- RESULT -->
+  <section id="resultView" class="hidden"></section>
+</main>
+
+<script>
+/* ========= CONFIG: set this to your n8n gate endpoint ========= */
+const API_URL = "https://n8n-meukron.modanova-events.co.in";
+/* ============================================================== */
+
+const $ = (id) => document.getElementById(id);
+let qr = null, busy = false, last = null;
+
+function show(view){
+  for (const v of ["scanView","loadView","resultView"]) $(v).classList.toggle("hidden", v !== view);
+}
+
+async function startScanner(){
+  show("scanView"); $("scanErr").textContent = ""; busy = false; last = null;
+  if (!qr) qr = new Html5Qrcode("reader", { verbose:false });
+  try{
+    await qr.start({ facingMode:"environment" }, { fps:10, qrbox:{ width:240, height:240 } }, onScan, ()=>{});
+  }catch(e){
+    $("scanErr").textContent = "Camera unavailable. Allow camera access and reload.";
+  }
+}
+async function stopScanner(){ if (qr){ try{ await qr.stop(); }catch(_){} } }
+
+function onScan(text){
+  if (busy) return;
+  const payload = String(text).trim();
+  if (payload === last) return;       // ignore repeats of the same frame
+  last = payload;
+  busy = true;
+  stopScanner().then(()=> lookup(payload));
+}
+
+function parsePayload(p){
+  const i = p.indexOf("|");
+  if (i < 0) return null;
+  return { id: p.slice(0,i).trim(), t: p.slice(i+1).trim() };
+}
+
+async function call(id, t, count){
+  let url = API_URL + "?id=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(t);
+  if (count != null) url += "&count=" + encodeURIComponent(count);
+  const res = await fetch(url, { method:"GET", cache:"no-store" });
+  return res.json();
+}
+
+async function lookup(payload){
+  const parsed = parsePayload(payload);
+  if (!parsed){ return renderMessage("#b91c1c","🚫","Not a booking code","That QR isn't from this system."); }
+  show("loadView");
+  try{
+    const d = await call(parsed.id, parsed.t, null);
+    d._id = parsed.id; d._t = parsed.t;
+    renderResult(d);
+  }catch(e){
+    renderMessage("#334155","📡","Connection problem","Couldn't reach the server. Check internet and try again.");
+  }
+}
+
+function badge(d){
+  if (d.full) return '<span class="pill" style="background:#fef3c7;color:#b45309">Full</span>';
+  return '<span class="pill" style="background:#dcfce7;color:#15803d">Valid</span>';
+}
+function detailRows(d){
+  const type = [d.slotType, d.time].filter(Boolean).join(" · ");
+  return `<div class="name">${esc(d.name)}</div>
+          <div class="sub">${esc(type)}${d.event? " &nbsp;·&nbsp; "+esc(d.event):""}</div>
+          <div class="tally">
+            <div class="tile"><b>${d.seats}</b><span>Booked</span></div>
+            <div class="tile"><b>${d.checkedIn}</b><span>Entered</span></div>
+            <div class="tile left"><b>${d.remaining}</b><span>Left</span></div>
+          </div>`;
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderResult(d){
+  show("resultView");
+  if (!d.found){ return renderMessage("#b91c1c","❌","Not registered","No booking matches this code."); }
+  if (!d.valid){ return renderMessage("#b91c1c","⛔","Invalid / fake code","This QR could not be verified."); }
+
+  if (d.full){
+    $("resultView").innerHTML =
+      `<div class="card">${badge(d)}${detailRows(d)}
+        <div class="center" style="margin-top:16px;color:#b45309;font-weight:700">⚠️ All ${d.seats} already entered — entry denied.</div>
+        <button class="btn-dark" onclick="startScanner()">Scan next</button>
+      </div>`;
+    return;
+  }
+
+  $("resultView").innerHTML =
+    `<div class="card">${badge(d)}${detailRows(d)}
+      <button class="btn-primary" id="allBtn">✓ Check in all (${d.remaining})</button>
+      <button class="btn-ghost" id="partBtn">Partial entry…</button>
+      <div id="stepWrap" class="hidden">
+        <div class="stepper">
+          <button id="minus">−</button>
+          <div class="num" id="num">1</div>
+          <button id="plus">+</button>
+        </div>
+        <button class="btn-primary" id="confirmBtn">Admit <span id="confirmN">1</span> →</button>
+      </div>
+      <button class="btn-dark" onclick="startScanner()">Cancel · scan next</button>
+      <p id="actErr" class="err" style="color:#b91c1c"></p>
+    </div>`;
+
+  let n = 1, max = d.remaining;
+  const setN = (v)=>{ n = Math.max(1, Math.min(max, v)); $("num").textContent = n; $("confirmN").textContent = n; };
+  $("allBtn").onclick   = ()=> doCheckin(d, d.remaining);
+  $("partBtn").onclick  = ()=>{ $("stepWrap").classList.remove("hidden"); $("partBtn").classList.add("hidden"); setN(1); };
+  $("minus").onclick    = ()=> setN(n-1);
+  $("plus").onclick     = ()=> setN(n+1);
+  $("confirmBtn").onclick = ()=> doCheckin(d, n);
+}
+
+async function doCheckin(d, count){
+  show("loadView");
+  try{
+    const r = await call(d._id, d._t, count);
+    r._id = d._id; r._t = d._t;
+    renderCheckedIn(r);
+  }catch(e){
+    renderResult(d); $("actErr") && ($("actErr").textContent = "Network error — not recorded. Try again.");
+  }
+}
+
+function renderCheckedIn(d){
+  show("resultView");
+  const more = d.full
+    ? `<div style="color:#b45309;font-weight:700;margin-top:6px">Booking now full — QR is now void.</div>`
+    : `<div class="sub" style="margin-top:6px">${d.remaining} more still allowed on this QR.</div>`;
+  $("resultView").innerHTML =
+    `<div class="card center">
+       <div class="big-emoji">✅</div>
+       <div class="msg-title">Admitted ${d.justEntered}</div>
+       <div style="font-size:18px;color:#15803d;font-weight:700">${d.checkedIn} of ${d.seats} entered</div>
+       ${more}
+       <button class="btn-primary" style="margin-top:20px" onclick="startScanner()">Scan next guest</button>
+     </div>`;
+}
+
+function renderMessage(color, emoji, title, body){
+  show("resultView");
+  $("resultView").innerHTML =
+    `<div class="card center" style="border-top:6px solid ${color}">
+       <div class="big-emoji">${emoji}</div>
+       <div class="msg-title">${title}</div>
+       <div class="sub">${esc(body)}</div>
+       <button class="btn-dark" onclick="startScanner()">Scan next</button>
+     </div>`;
+}
+
+if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+startScanner();
+</script>
+</body>
+</html>
