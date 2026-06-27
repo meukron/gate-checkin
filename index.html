@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Gate">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Gate Check-In</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -50,6 +52,11 @@
   @keyframes r{ to{ transform:rotate(360deg); } }
   .err{ color:#fecaca; text-align:center; font-size:14px; margin-top:10px; }
   .hidden{ display:none !important; }
+  #iosHint{ position:fixed; left:12px; right:12px; bottom:12px; background:#fff; color:var(--ink);
+            border-radius:16px; padding:14px 44px 14px 16px; box-shadow:0 12px 40px rgba(0,0,0,.35); font-size:14px; line-height:1.4; }
+  #iosHint b{ color:var(--green); }
+  #iosHint .x{ position:absolute; top:8px; right:10px; font-size:22px; color:var(--muted); background:none; padding:4px; }
+  .share{ display:inline-block; font-weight:800; }
 </style>
 </head>
 <body>
@@ -59,6 +66,7 @@
   <section id="scanView" class="scanwrap">
     <div id="reader"></div>
     <p class="hint">Point the camera at the guest's QR code.</p>
+    <button id="startBtn" class="btn-primary hidden" onclick="startScanner()">📷 Tap to start camera</button>
     <p id="scanErr" class="err"></p>
   </section>
 
@@ -69,9 +77,15 @@
   <section id="resultView" class="hidden"></section>
 </main>
 
+<!-- iOS-only install hint (Safari has no install button) -->
+<div id="iosHint" class="hidden">
+  <button class="x" onclick="document.getElementById('iosHint').classList.add('hidden')">×</button>
+  To install: tap <span class="share">Share ↑</span> then <b>Add to Home Screen</b>.
+</div>
+
 <script>
 /* ========= CONFIG: set this to your n8n gate endpoint ========= */
-const API_URL = "https://n8n-meukron.modanova-events.co.in/webhook/verify";
+const API_URL = "https://YOUR-N8N-DOMAIN/webhook/verify";
 /* ============================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -83,11 +97,14 @@ function show(view){
 
 async function startScanner(){
   show("scanView"); $("scanErr").textContent = ""; busy = false; last = null;
+  $("startBtn").classList.add("hidden");
   if (!qr) qr = new Html5Qrcode("reader", { verbose:false });
   try{
     await qr.start({ facingMode:"environment" }, { fps:10, qrbox:{ width:240, height:240 } }, onScan, ()=>{});
   }catch(e){
-    $("scanErr").textContent = "Camera unavailable. Allow camera access and reload.";
+    // iOS Safari may block camera from auto-starting without a tap — offer a button.
+    $("scanErr").textContent = "Allow camera access, then tap below.";
+    $("startBtn").classList.remove("hidden");
   }
 }
 async function stopScanner(){ if (qr){ try{ await qr.stop(); }catch(_){} } }
@@ -220,6 +237,15 @@ function renderMessage(color, emoji, title, body){
 }
 
 if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+
+// iOS install hint: iOS has no install prompt — guide the user to Share → Add to Home Screen.
+(function(){
+  const ua = navigator.userAgent || "";
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  if (iOS && !standalone) setTimeout(()=> $("iosHint").classList.remove("hidden"), 800);
+})();
+
 startScanner();
 </script>
 </body>
