@@ -84,8 +84,12 @@
 </div>
 
 <script>
-/* ========= CONFIG: set this to your n8n gate endpoint ========= */
-const API_URL = "https://n8n-meukron.modanova-events.co.in/webhook/verify";
+/* ========= CONFIG ============================================= */
+const API_URL  = "https://n8n-meukron.modanova-events.co.in/webhook/verify";
+// Must match GATE_SECRET in your Postgres config table.
+// To rotate: update the config row and change this value, then
+// redeploy the app to gate devices.
+const GATE_KEY = "mg_gate_2025";
 /* ============================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -125,7 +129,7 @@ function parsePayload(p){
 }
 
 async function call(id, t, count){
-  let url = API_URL + "?id=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(t);
+  let url = API_URL + "?id=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(t) + "&key=" + encodeURIComponent(GATE_KEY);
   if (count != null) url += "&count=" + encodeURIComponent(count);
   const res = await fetch(url, { method:"GET", cache:"no-store" });
   return res.json();
@@ -163,6 +167,7 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;",
 function renderResult(d){
   show("resultView");
   if (!d.found){ return renderMessage("#b91c1c","❌","Not registered","No booking matches this code."); }
+  if (d.cancelled){ return renderMessage("#b45309","🚫","Booking cancelled","This booking was cancelled. Entry not permitted."); }
   if (!d.valid){ return renderMessage("#b91c1c","⛔","Invalid / fake code","This QR could not be verified."); }
 
   if (d.full){
