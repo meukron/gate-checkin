@@ -1,6 +1,6 @@
 // Minimal service worker — enables "install" and offline app-shell launch.
 // API calls to n8n always go to the network (never cached).
-const CACHE = 'gate-v1';
+const CACHE = 'gate-rsvp-v1';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -16,9 +16,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  // Only handle our own files; let the n8n API and CDN go straight to network.
   if (url.origin !== self.location.origin) return;
-  // Network-first for the page (so updates apply), cache fallback for offline launch.
   e.respondWith(
     fetch(e.request).then((res) => {
       const copy = res.clone();
