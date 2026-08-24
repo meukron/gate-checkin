@@ -74,6 +74,8 @@
          animation:r 1s linear infinite; margin:40px auto; }
   @keyframes r{ to{ transform:rotate(360deg); } }
   .err{ color:#fecaca; text-align:center; font-size:14px; margin-top:10px; }
+  .warnday{ background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:12px;
+            padding:10px 12px; font-size:13.5px; font-weight:700; margin-top:12px; }
   .hidden{ display:none !important; }
 </style>
 </head>
@@ -176,6 +178,12 @@ async function requote(){
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 const rupee = (n)=> "₹" + (Number(n)||0).toLocaleString("en-IN");
 
+function wrongDayBanner(d){
+  if (!d.wrongDay) return "";
+  const dt = d.bookingDate ? new Date(d.bookingDate+"T12:00:00Z") : null;
+  const lbl = dt ? dt.toUTCString().slice(0,11) : d.bookingDate;
+  return `<div class="warnday">⚠️ This booking is for ${esc(lbl)} — NOT tonight. Admit at your discretion.</div>`;
+}
 function statusPill(d){
   if (d.paymentStatus === "paid") return '<span class="pill" style="background:#dcfce7;color:#15803d">Confirmed · paid</span>';
   return '<span class="pill" style="background:#fef3c7;color:#b45309">Tentative · unpaid</span>';
@@ -209,6 +217,7 @@ function renderResult(d){
   const unknownParty = (Number(d.seats)||0) === 0;
   $("resultView").innerHTML =
     `<div class="card">${statusPill(d)}${headerRows(d)}
+      ${wrongDayBanner(d)}
       ${partyEditor(d)}
       <div class="amount"><div><div class="lbl">${isBalance?'Balance due (late arrival)':'Collect'}</div>
         <div class="val">${rupee(due)}</div></div>
@@ -274,6 +283,7 @@ function admitPanel(d, note){
   const canAll = remaining > 0;
   $("resultView").innerHTML =
     `<div class="card">${statusPill(d)}${headerRows(d)}
+      ${wrongDayBanner(d)}
       ${note?`<div class="sub" style="color:#15803d;font-weight:700;margin-top:8px">${esc(note)}</div>`:""}
       <div class="tally">
         <div class="tile"><b>${seats||'—'}</b><span>Booked</span></div>

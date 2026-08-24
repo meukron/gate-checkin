@@ -1,6 +1,6 @@
 // Minimal service worker — enables "install" and offline app-shell launch.
 // API calls to n8n always go to the network (never cached).
-const CACHE = 'gate-rsvp-v3';
+const CACHE = 'gate-rsvp-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
