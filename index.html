@@ -107,8 +107,11 @@ function show(view){ for (const v of ["scanView","loadView","resultView"]) $(v).
 function staffCode(force){
   let s = localStorage.getItem('gate_staff') || '';
   if (force || !s){
-    s = prompt('Staff code:') || '';
-    if (s) localStorage.setItem('gate_staff', s);
+    const inp = prompt('Staff code:');
+    if (inp === null) return null;          // user cancelled
+    s = inp.trim();
+    if (!s) return null;
+    localStorage.setItem('gate_staff', s);
   }
   return s.trim();
 }
@@ -224,7 +227,7 @@ async function startUpi(amount){
   show("loadView");
   try{
     const r = await call(Object.assign({ action:"upi", amount }, partyParams()));
-    if (!r.upi || !r.qrImage){ renderResult(cur); $("actErr")&&($("actErr").textContent="Couldn't create payment QR."); return; }
+    if (!r.upi || !r.qrImage){ renderResult(cur); $("actErr")&&($("actErr").textContent=(r && r.error) ? ("Payment QR failed: " + r.error) : "Couldn't create payment QR."); return; }
     show("resultView");
     $("resultView").innerHTML =
       `<div class="card center">
@@ -251,12 +254,14 @@ async function startUpi(amount){
 
 async function cashCollect(amount){
   const staff = staffCode(false);
+  if (staff === null){ renderResult(cur); return; }
   show("loadView");
   try{
     const r = await call(Object.assign({ action:"cash", amount, staff }, partyParams()));
     if (r.message === "Staff code required" || r.staffAuth === false){
-      staffCode(true);            // re-prompt & store
-      return cashCollect(amount); // one retry with fresh code
+      localStorage.removeItem('gate_staff');
+      if (staffCode(true) === null){ renderResult(cur); return; }
+      return cashCollect(amount);
     }
     r._id=cur._id; r._t=cur._t; cur=r;
     admitPanel(r, "Cash collected " + rupee(amount) + " ✓");
@@ -293,12 +298,14 @@ function showStepper(max){ nMax = Math.max(1, max); n = 1; $("stepWrap").classLi
 function setN(v){ n = Math.max(1, Math.min(nMax, v)); $("num").textContent = n; $("confirmN").textContent = n; }
 
 async function doCheckin(count){
+  const staff = staffCode(false);
+  if (staff === null){ admitPanel(cur); return; }
   show("loadView");
   try{
-    const staff = staffCode(false);
     const r = await call(Object.assign({ count, staff }, partyParams()));
     if (r.message === "Staff code required" || r.staffAuth === false){
-      staffCode(true);
+      localStorage.removeItem('gate_staff');
+      if (staffCode(true) === null){ admitPanel(cur); return; }
       return doCheckin(count);
     }
     r._id=cur._id; r._t=cur._t; cur=r;
