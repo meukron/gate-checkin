@@ -53,12 +53,12 @@
   .amount .lbl{ font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700; }
   .amount .val{ font-size:30px; font-weight:800; }
   .amount small{ font-size:12px; color:var(--muted); font-weight:600; }
-  .party{ display:flex; gap:8px; margin-top:14px; }
-  .pcol{ flex:1; background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:8px 6px; text-align:center; }
+  .party{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:14px; }
+  .pcol{ min-width:0; background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:7px 4px; text-align:center; }
   .pcol .plbl{ font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
-  .pcol .pctl{ display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px; }
-  .pcol button{ width:34px; height:34px; font-size:20px; background:#e2e8f0; color:var(--ink); border-radius:9px; }
-  .pcol .pnum{ font-size:22px; font-weight:800; min-width:26px; }
+  .pcol .pctl{ display:flex; align-items:center; justify-content:center; gap:4px; margin-top:4px; }
+  .pcol button{ width:28px; height:28px; font-size:17px; background:#e2e8f0; color:var(--ink); border-radius:8px; flex:none; }
+  .pcol .pnum{ font-size:19px; font-weight:800; min-width:16px; }
   .stepper{ display:flex; align-items:center; justify-content:center; gap:14px; margin-top:16px; }
   .stepper button{ width:54px; height:54px; font-size:28px; background:#f1f5f9; color:var(--ink); }
   .stepper .num{ font-size:38px; font-weight:800; min-width:64px; text-align:center; }
