@@ -208,6 +208,7 @@ function renderResult(d){
   if (d.cancelled){ return renderMessage("#b45309","🚫","Booking cancelled","This booking was cancelled. Entry not permitted."); }
   if (d.expired){ return renderMessage("#b45309","📅","Wrong day", d.message || "This QR is not valid tonight."); }
   if (!d.valid){ return renderMessage("#b91c1c","⛔","Invalid / fake code","This QR could not be verified."); }
+  if (d.full){ return renderAlreadyScanned(d); }
 
   const needsMoney = (d.paymentStatus !== "paid") || (Number(d.balance) > 0);
   if (!needsMoney) return admitPanel(d);
@@ -279,7 +280,10 @@ async function cashCollect(amount){
 
 function admitPanel(d, note){
   show("resultView");
-  const seats = Number(d.seats)||0, remaining = Number(d.remaining)|| (seats>0?seats:0);
+  const seats = Number(d.seats)||0;
+  const rw = Number(d.remaining);
+  const remaining = Number.isFinite(rw) ? Math.max(0, rw) : (seats>0?seats:0);
+  if (seats>0 && remaining<=0) return renderAlreadyScanned(d);
   const canAll = remaining > 0;
   $("resultView").innerHTML =
     `<div class="card">${statusPill(d)}${headerRows(d)}
@@ -337,6 +341,19 @@ function renderCheckedIn(d){
        <div style="font-size:18px;color:#15803d;font-weight:700">${d.checkedIn} of ${d.seats||'?'} entered</div>
        ${more}
        <button class="btn-primary" style="margin-top:20px" onclick="startScanner()">Scan next guest</button>
+     </div>`;
+}
+
+function renderAlreadyScanned(d){
+  show("resultView");
+  const seats = Number(d.seats)||0, entered = Number(d.checkedIn)||seats;
+  $("resultView").innerHTML =
+    `<div class="card center" style="border-top:6px solid #b45309">
+       <div class="big-emoji">🚫</div>
+       <div class="msg-title">QR already scanned</div>
+       <div style="font-size:18px;font-weight:700">${entered} of ${seats||'?'} already entered</div>
+       <div class="sub">This code is used up — no entries left on it.</div>
+       <button class="btn-primary" style="margin-top:20px" onclick="startScanner()">Scan next QR</button>
      </div>`;
 }
 
