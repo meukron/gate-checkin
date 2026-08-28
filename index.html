@@ -87,6 +87,7 @@
     <p class="hint">Point the camera at the guest's QR code.</p>
     <button id="startBtn" class="btn-primary hidden" onclick="startScanner()">📷 Tap to start camera</button>
     <p id="scanErr" class="err"></p>
+    <button class="btn-ghost" onclick="showLog()" style="margin-top:14px">📖 Tonight's admissions</button>
   </section>
   <section id="loadView" class="hidden"><div class="spin"></div></section>
   <section id="resultView" class="hidden"></section>
@@ -342,6 +343,90 @@ function renderCheckedIn(d){
        ${more}
        <button class="btn-primary" style="margin-top:20px" onclick="startScanner()">Scan next guest</button>
      </div>`;
+}
+
+/* ========= Admissions log (escalation lookups) ================= */
+let logEntries = [];
+
+async function showLog(){
+  const staff = staffCode(false);
+  if (staff === null) return;
+  if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  await stopScanner();
+  show("loadView");
+  let r;
+  try{
+    const res = await fetch(API_URL + "?action=log&key=" + encodeURIComponent(GATE_KEY) +
+                            "&staff=" + encodeURIComponent(staff), { cache:"no-store" });
+    r = await res.json();
+  }catch(e){
+    return renderMessage("#334155","📡","Connection problem","Couldn't load the log. Check internet and try again.");
+  }
+  if (r && r.log === false){
+    localStorage.removeItem('gate_staff');
+    if (staffCode(true) === null){ startScanner(); return; }
+    return showLog();
+  }
+  renderLog((r && r.entries) || []);
+}
+
+function fmtEntryTime(s){
+  s = String(s || "");
+  let iso = s.replace(" ", "T");
+  const m = iso.match(/([+-]\d{2})$/); if (m) iso += ":00";
+  const d = new Date(iso);
+  if (isNaN(d)) return s.slice(11, 16);
+  return d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12:true });
+}
+
+function payBadge(e){
+  const pm = String(e.PayMode || "").toLowerCase();
+  if (pm === "gate_waived") return ["⚠️ Waived", "#fee2e2;color:#b91c1c"];
+  if (pm === "gate_cash")   return ["💵 Cash", "#dcfce7;color:#15803d"];
+  if (pm === "gate_upi")    return ["📱 UPI at gate", "#dcfce7;color:#15803d"];
+  if (String(e.Status || "").toUpperCase() === "PAID") return ["✅ Paid online", "#dcfce7;color:#15803d"];
+  return ["⏳ Unpaid", "#fef3c7;color:#b45309"];
+}
+
+function renderLog(entries){
+  logEntries = entries;
+  show("resultView");
+  $("resultView").innerHTML =
+    `<div class="card">
+       <div class="name">Tonight's admissions</div>
+       <div class="sub" id="logCount"></div>
+       <input id="logSearch" type="search" placeholder="🔍 Name or booking code…" autocomplete="off"
+              style="width:100%;margin:12px 0 4px;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;box-sizing:border-box"
+              oninput="drawLogRows(this.value)">
+       <div id="logRows"></div>
+       <button class="btn-dark" style="margin-top:14px" onclick="startScanner()">← Back to scanner</button>
+     </div>`;
+  drawLogRows("");
+}
+
+function drawLogRows(filter){
+  const f = String(filter || "").trim().toLowerCase();
+  const list = logEntries.filter(e => !f ||
+    String(e.Name || "").toLowerCase().includes(f) ||
+    String(e.BookingID || "").toLowerCase().includes(f));
+  const people = list.reduce((s,e)=> s + (Number(e.CheckedInCount)||0), 0);
+  $("logCount").textContent = list.length + " QR" + (list.length===1?"":"s") + " · " + people + " people admitted (last 14 h)";
+  $("logRows").innerHTML = list.length ? list.map(e => {
+    const badge = payBadge(e);
+    const partyBits = [Number(e.Men)>0 ? e.Men+"M" : "", Number(e.Women)>0 ? e.Women+"W" : "",
+                       Number(e.Couples)>0 ? e.Couples+"C" : ""].filter(Boolean).join(" ");
+    return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+        <b style="font-size:16px">${esc(e.Name || "Guest")}</b>
+        <span style="white-space:nowrap;color:#64748b;font-size:13px">${esc(fmtEntryTime(e.CheckInTime))}</span>
+      </div>
+      <div class="sub" style="margin-top:2px">${esc(e.BookingID)} · in ${Number(e.CheckedInCount)||0}/${Number(e.Seats)||"?"}${partyBits ? " · " + esc(partyBits) : ""}</div>
+      <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+        <span class="pill" style="background:${badge[1]}">${badge[0]}</span>
+        <span style="font-weight:700">${rupee(e.AmountCollected)}</span>
+      </div>
+    </div>`; }).join("")
+    : `<p class="sub" style="margin-top:12px">${f ? "No match for that search." : "No admissions recorded yet tonight."}</p>`;
 }
 
 function renderAlreadyScanned(d){
